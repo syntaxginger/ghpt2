@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Electricity Usage & Users Dashboard</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body { font-family: sans-serif; padding: 20px; background-color: #f4f7f6; }
+        .container { max-width: 1000px; margin: auto; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+        .controls { margin-bottom: 20px; text-align: center; }
+        select { padding: 8px; font-size: 16px; border-radius: 4px; border: 1px solid #ccc; width: 250px; }
+        .chart-container { margin-bottom: 50px; height: 450px; }
+        h1, h2 { text-align: center; color: #333; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>Electricity Statistics Dashboard</h1>
+
+    <div class="controls">
+        <label for="provinceSelect"><strong>Select Province:</strong> </label>
+        <select id="provinceSelect">
+            <option value="">Loading provinces...</option>
+        </select>
+    </div>
+
+    <div class="chart-container">
+        <h2>Electricity Usage (kWh) per Year</h2>
+        <canvas id="usageChart"></canvas>
+    </div>
+
+    <hr>
+
+    <div class="chart-container">
+        <h2>Number of Electricity Users per Year</h2>
+        <canvas id="usersChart"></canvas>
+    </div>
+</div>
+
+<script>
+    let usageData = [];
+    let usersData = [];
+    let usageChartInstance = null;
+    let usersChartInstance = null;
+
+    // Helper to get nested data if inside 'Sheet1'
+    const cleanData = (data) => Array.isArray(data) ? data : (data.Sheet1 || []);
+
+    async function loadData() {
+        try {
+            const usageRes = await fetch('electricity_usages_en.json');
+            const rawUsage = await usageRes.json();
+            usageData = cleanData(rawUsage);
+
+            const usersRes = await fetch('electricity_users_en.json');
+            const rawUsers = await usersRes.json();
+            usersData = cleanData(rawUsers);
+
+            initProvinceSelect();
+        } catch (error) {
+            console.error("Error loading JSON files:", error);
+            alert("Could not load data. Please ensure 'electricity_usages_en.json' and 'electricity_users_en.json' are in the same folder and you are running this via a local server (or VS Code Live Server).");
+        }
+    }
+
+    function initProvinceSelect() {
+        const provinces = [...new Set(usageData.map(item => item.province_name))].sort();
+        const select = document.getElementById('provinceSelect');
+        select.innerHTML = '';
+        
+        provinces.forEach(prov => {
+            const opt = document.createElement('option');
+            opt.value = prov;
+            opt.textContent = prov;
+            select.appendChild(opt);
+        });
+
+        select.addEventListener('change', () => updateCharts(select.value));
+        updateCharts(provinces[0]); // Initial Load
+    }
+
+    function getCategories(data, suffix) {
+        if (data.length === 0) return [];
+        return Object.keys(data[0]).filter(key => key.endsWith(suffix));
+    }
+
+    function createChart(canvasId, title, filteredData, categories, labelSuffix) {
+        const years = [...new Set(filteredData.map(d => d.year))].sort();
+        
+        const datasets = categories.map((cat, index) => {
+            const colors = [
+                '#3498db', '#e74c3c', '#2ecc71', '#f1c40f', '#9b59b6', 
+                '#34495e', '#1abc9c', '#e67e22', '#95a5a6', '#d35400'
+            ];
+            return {
+                label: cat.replace(labelSuffix, '').replace(/_/g, ' ').toUpperCase(),
+                data: years.map(yr => {
+                    const entry = filteredData.find(d => d.year === yr);
+                    return entry ? entry[cat] : 0;
+                }),
+                backgroundColor: colors[index % colors.length]
+            };
+        });
+
+        const ctx = document.getElementById(canvasId).getContext('2d');
+        
+        // Destroy existing chart if it exists
+        if (canvasId === 'usageChart' && usageChartInstance) usageChartInstance.destroy();
+        if (canvasId === 'usersChart' && usersChartInstance) usersChartInstance.destroy();
+
+        const config = {
+            type: 'bar',
+            data: { labels: years, datasets: datasets },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    y: { beginAtZero: true }
+                },
+                plugins: {
+                    legend: { position: 'bottom', labels: { boxWidth: 12, padding: 15 } }
+                }
+            }
+        };
+
+        const chart = new Chart(ctx, config);
+        if (canvasId === 'usageChart') usageChartInstance = chart;
+        else usersChartInstance = chart;
+    }
+
+    function updateCharts(province) {
+        const filteredUsage = usageData.filter(d => d.province_name === province);
+        const filteredUsers = usersData.filter(d => d.province_name === province);
+
+        const usageCats = getCategories(usageData, '_kwh');
+        const userCats = getCategories(usersData, '_count');
+
+        createChart('usageChart', 'Usage', filteredUsage, usageCats, '_kwh');
+        createChart('usersChart', 'Users', filteredUsers, userCats, '_count');
+    }
+
+    // Start loading
+    loadData();
+</script>
+
+</body>
+</html>
+>>>>>>> 7ffd4a0 (ver1 of barchart)
